@@ -1,0 +1,58 @@
+name: CI / Deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  deploy:
+    needs: check
+    # Only deploy from main, and only once the repo has been configured (forks skip this).
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOMAIN_NAME != ''
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # for OIDC (AWS_ROLE_ARN)
+    concurrency: deploy
+    env:
+      DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+      SUBDOMAIN: ${{ vars.SUBDOMAIN }}
+      ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+      SCHEDULE_HOUR: ${{ vars.SCHEDULE_HOUR }}
+      SCHEDULE_TIMEZONE: ${{ vars.SCHEDULE_TIMEZONE }}
+      TOP_N: ${{ vars.TOP_N }}
+      HOSTED_ZONE_ID: ${{ secrets.HOSTED_ZONE_ID }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Uses OIDC if AWS_ROLE_ARN is set (recommended), otherwise access keys.
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+      - run: npx cdk deploy --require-approval never
