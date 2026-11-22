@@ -18,7 +18,6 @@ interface OwnedGamesResponse {
 /**
  * Uses GetOwnedGames rather than GetRecentlyPlayedGames: it includes a real
  * last-played timestamp for every game, not just a two-week window.
- * Requires the profile's "Game details" privacy setting to be Public.
  */
 export class SteamAdapter implements PlatformAdapter {
   readonly platform = "steam" as const;
